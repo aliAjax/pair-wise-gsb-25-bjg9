@@ -1,160 +1,105 @@
+import { useMemo, useState } from "react";
 import "./styles.css";
+import { StoreProvider, useStore } from "./data/store";
+import type { ActorRole } from "./types";
+import PatientList from "./components/PatientList";
+import AssessmentForm from "./components/AssessmentForm";
+import WorkflowPanel from "./components/WorkflowPanel";
+import ScheduleBoard from "./components/ScheduleBoard";
+import AssessmentArchive from "./components/AssessmentArchive";
+import AuditTrail from "./components/AuditTrail";
 
-const project = {
-  "id": "hxwl-11",
-  "port": 5111,
-  "title": "眼科验光记录",
-  "subtitle": "视力、屈光参数与复查处方对比",
-  "stack": "React + Vite + TypeScript + CSS",
-  "theme": [
-    "#2563eb",
-    "#059669",
-    "#dc2626"
-  ],
-  "domain": "眼视光",
-  "users": [
-    "验光师",
-    "门店顾问",
-    "复查医生"
-  ],
-  "metrics": [
-    "近视进展",
-    "散光变化",
-    "复查提醒",
-    "处方数量"
-  ],
-  "filters": [
-    "儿童",
-    "成人",
-    "渐进片",
-    "角膜塑形镜"
-  ],
-  "fields": [
-    "裸眼视力",
-    "矫正视力",
-    "球镜",
-    "柱镜",
-    "轴位",
-    "瞳距",
-    "角膜曲率"
-  ],
-  "records": [
-    [
-      "Patient-032",
-      "儿童近视",
-      "复查",
-      "右眼-2.75DS，轴位180"
-    ],
-    [
-      "Patient-081",
-      "渐进片",
-      "初配",
-      "ADD +1.50，瞳高待确认"
-    ],
-    [
-      "Patient-144",
-      "散光",
-      "复查",
-      "柱镜变化0.50D"
-    ]
-  ]
-};
+const ROLES: { id: ActorRole; label: string; desc: string }[] = [
+  { id: "nurse", label: "护理师", desc: "录入评估 / 排机 / 提交复查" },
+  { id: "doctor", label: "复查医生", desc: "确认继续 / 安全冻结" },
+];
 
-const statusColors = ["status-ok", "status-watch", "status-danger"];
+function Console() {
+  const { state } = useStore();
+  const [role, setRole] = useState<ActorRole>("nurse");
+  const [selectedId, setSelectedId] = useState(state.plans[0].id);
 
-function MetricCard({ label, value, index }: { label: string; value: string; index: number }) {
-  return (
-    <article className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <i className={statusColors[index % statusColors.length]} />
-    </article>
-  );
-}
+  const plan = state.plans.find((p) => p.id === selectedId) ?? state.plans[0];
 
-function App() {
-  const values = project.metrics.map((metric: string, index: number) => {
-    const base = [84, 12, 31, 7][index % 4];
-    return String(base + index * 3);
-  });
+  const metrics = useMemo(() => {
+    const review = state.plans.filter((p) => p.status === "pending_review").length;
+    const waiting = state.plans.filter((p) => p.status === "awaiting_doctor").length;
+    const frozen = state.plans.filter((p) => p.status === "frozen").length;
+    const booked = state.plans.filter((p) => p.booking).length;
+    return [
+      { label: "已占仪器时段", value: booked, cls: "badge-ok" },
+      { label: "待复核", value: review, cls: "badge-warn" },
+      { label: "待医生确认", value: waiting, cls: "badge-info" },
+      { label: "已冻结", value: frozen, cls: "badge-danger" },
+    ];
+  }, [state.plans]);
 
   return (
     <main className="app-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">{project.id} · port {project.port}</p>
-          <h1>{project.title}</h1>
-          <p className="subtitle">{project.subtitle}</p>
+          <p className="eyebrow">干眼热脉动疗程台 · DTP-Console</p>
+          <h1>干眼热脉动疗程台</h1>
+          <p className="subtitle">
+            按患者与眼别存档两次泪膜破裂时间、角膜染色分级与仪器时段；同一仪器同一时段仅一人。
+            破裂时间不足 5 秒或染色达 3 级自动待复核并释放时段，护理后复查经医生确认继续；
+            上皮脱落或灼伤立即冻结并停止后续预约。
+          </p>
         </div>
         <div className="stack-card">
-          <span>技术栈</span>
-          <strong>{project.stack}</strong>
+          <span>当前角色（数据、判定、留档、界面分层）</span>
+          <div className="role-switch">
+            {ROLES.map((r) => (
+              <button
+                key={r.id}
+                className={role === r.id ? "role active" : "role"}
+                onClick={() => setRole(r.id)}
+              >
+                <strong>{r.label}</strong>
+                <em>{r.desc}</em>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="metrics-grid">
-        {project.metrics.map((metric: string, index: number) => (
-          <MetricCard key={metric} label={metric} value={values[index]} index={index} />
+        {metrics.map((m) => (
+          <article key={m.label} className="metric-card">
+            <span>{m.label}</span>
+            <strong>{m.value}</strong>
+            <i className={m.cls} />
+          </article>
         ))}
       </section>
 
       <section className="workspace">
         <aside className="panel narrow">
-          <h2>角色</h2>
-          <div className="chips">
-            {project.users.map((user: string) => (
-              <span key={user}>{user}</span>
-            ))}
-          </div>
-          <h2>筛选</h2>
-          <div className="chips muted">
-            {project.filters.map((filter: string) => (
-              <button key={filter}>{filter}</button>
-            ))}
-          </div>
+          <h2>疗程患者</h2>
+          <PatientList
+            plans={state.plans}
+            selectedId={plan.id}
+            onSelect={setSelectedId}
+          />
         </aside>
 
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p>{project.domain}</p>
-              <h2>记录字段</h2>
-            </div>
-            <button className="primary-action">新增记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
+        <div className="main-col">
+          <WorkflowPanel plan={plan} role={role} />
+          <AssessmentForm plan={plan} role={role} />
+        </div>
       </section>
 
-      <section className="records panel">
-        <div className="section-heading">
-          <div>
-            <p>示例数据</p>
-            <h2>近期记录</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="record-list">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")} className="record-card">
-              <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <ScheduleBoard selectedPlan={plan} role={role} />
+      <AssessmentArchive plan={plan} />
+      <AuditTrail />
     </main>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <StoreProvider>
+      <Console />
+    </StoreProvider>
+  );
+}
